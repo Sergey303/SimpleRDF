@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -40,12 +41,13 @@ namespace SimpleRDF
             }
              gr = new Graph(path);
             gr.Load(new[] {dataPath + "0001.xml"});
-            TValue.ItemCtor = id => new Item(gr.GetEntryById(id), gr);
+            var cach=new Hashtable();
+            TValue.ItemCtor = id => (Item)(cach[id] ?? (cach[id] = new Item(gr.GetEntryById(id), gr)));
 
             timer.Restart();
             query = new Query(@"..\..\query.txt", gr);
             timer.Stop();
-            using (var f = new StreamWriter(@"..\..\Output.txt", true))
+            using (var f = new StreamWriter(@"..\..\Output.txt", false))
                 f.WriteLine("read query time {0}ms {1}ticks, memory {2}"
        , timer.ElapsedMilliseconds, timer.ElapsedTicks / 10000L,
        GC.GetTotalMemory(true) / (1024L * 1024L));

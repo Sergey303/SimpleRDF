@@ -23,7 +23,8 @@ namespace SimpleRDF
         private void InitCells()
         {
             if (!File.Exists(path + "triplets.pac") 
-                || !File.Exists(path + "graph_x.pxc")) return;
+                || !File.Exists(path + "graph_x.pxc")
+                || !File.Exists(path + "n4.pxc")) return;
             triplets = new PaCell(tp_triplets, path + "triplets.pac");
             any_triplet = triplets.Root.Element(0);
             graph_x = new PxCell(tp_graph, path + "graph_x.pxc");
@@ -47,6 +48,7 @@ namespace SimpleRDF
             // Закроем использование
             if (triplets != null) { triplets.Close(); triplets = null; }
             if (graph_x != null) { graph_x.Close(); graph_x = null; }
+            if (n4_x != null) { n4_x.Close(); graph_x = null; }
             // Создадим ячейки
             triplets = new PaCell(tp_triplets, path + "triplets.pac", false); 
             triplets.Clear();
@@ -54,7 +56,7 @@ namespace SimpleRDF
             graph_a = new PaCell(tp_graph, path + "graph_a.pac", false);
             graph_x = new PxCell(tp_graph, path + "graph_x.pxc", false); graph_x.Clear();
             n4 = new PaCell(tp_n4, path + "n4.pac", false); n4.Clear();
-            n4_x = new PxCell(tp_n4, path + "n4.pxc", false); n4.Clear();
+            n4_x = new PxCell(tp_n4, path + "n4.pxc", false); n4_x.Clear();
             Console.WriteLine("cells initiated duration=" + (DateTime.Now - tt0).Ticks / 10000L); tt0 = DateTime.Now;
 
             TripletSerialInput(triplets, rdf_files);
@@ -104,17 +106,28 @@ namespace SimpleRDF
             return found;
         }
 
-        public IEnumerable<PxEntry> GetEntriesByName(string name)
+        public IEnumerable<string> GetEntriesByName(string name)
         {
-            string n4=name.Length>4 ? name.Substring(0,4) : name;
+            if (string.IsNullOrWhiteSpace(name)) yield break;//throw 
+            name = name.ToLower();
+            string n4 = (name.Length > 4 ? name.Substring(0, 4) : name);
             var foundPxN4 =
                 n4_x.Root.BinarySearchFirst(element =>
                 {
                     var s = element.Field(1).Get().Value as string;
-                    return OnCompareN4(s, n4);
+                    return String.Compare(s, n4, StringComparison.Ordinal);
                 });
-            return ((int[])foundPxN4.Field(0).Get().Value)
-                .Select(GetEntryById);
+            if (foundPxN4.offset == long.MinValue) yield break;
+            foreach (var off in (long[]) foundPxN4.Field(0).Get().Value)
+            {
+                any_triplet.offset = off;
+                object[] tri_o = (object[])any_triplet.Get().Value;
+                int tag = (int)tri_o[0];
+                object[] rec = (object[])tri_o[1];
+                if(tag!=2) throw new Exception("not data triplet in n4");
+                if(((string) rec[2]).ToLower()!=name) continue;
+                yield return rec[0] as string;
+            }
         }
 
         /// <summary>
@@ -384,7 +397,7 @@ namespace SimpleRDF
                     // Поместим информацию в таблицу имен n4
                     string name = (string)rec[2];
                     string name4 = name.Length <= 4 ? name : name.Substring(0, 4);
-                    n4.V(new object[] { hs_s, name4.ToLower() });
+                    n4.V(new object[] { tri.Offset, name4.ToLower() });
                 }
             }
             quads.Se();
@@ -500,7 +513,7 @@ namespace SimpleRDF
                             new NamedType("hs_p", new PType(PTypeEnumeration.integer)),
                             new NamedType("off", new PTypeSequence(new PType(PTypeEnumeration.longinteger))))))));
             tp_n4 = new PTypeSequence(new PTypeRecord(
-                new NamedType("hs_e", new PType(PTypeEnumeration.integer)),
+                new NamedType("off", new PType(PTypeEnumeration.longinteger)),
                 new NamedType("s4", new PTypeFString(4))));
         }
     }

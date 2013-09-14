@@ -46,28 +46,20 @@ namespace SimpleRDF
         public bool IsObject;
         public string Value;
         internal HashSet<Item> Items;
-        private HashSet<string> dataVaues;
+        internal HashSet<string> DataVaues;
         
         public Item Item
         {
             get { return item ?? (item=ItemCtor(Value)); }
         }
 
-        public IEnumerable<object> Values
-        {
-            get
-            {
-                if (IsObject) return Items;
-                return dataVaues;
-            }
-        }
         public TValue Interselect(IEnumerable<Item> value)
         {
             if (!IsObject)
             {
                 IsObject = true;
-                if (dataVaues != null)
-                    Interselect(dataVaues.Select(ItemCtor));
+                if (DataVaues != null)
+                    Interselect(DataVaues.Select(ItemCtor));
             }
             if (Items == null)
                 Items = new HashSet<Item>(value);
@@ -79,38 +71,43 @@ namespace SimpleRDF
         {
             if (IsObject)
                 Interselect(value.Select(ItemCtor));
-            else if (dataVaues == null)
-                dataVaues = new HashSet<string>(value);
+            else if (DataVaues == null)
+                DataVaues = new HashSet<string>(value);
             else
-                dataVaues.IntersectWith(value);
+                DataVaues.IntersectWith(value);
             return this;
         }
 
 
-        public TValue SetValue(object value, bool isObject)
+        public void SetValue(string value, bool isObject)
         {
             IsObject = isObject;
-            return SetValue(value);
+            SetValue(value);
         }
-        public TValue SetValue(object value)
+        public void SetValue(Item value, bool isObject)
         {
-            //if (value == null) return;
+            IsObject = isObject;
+            SetValue(value);
+        }
+        public void SetValue(string value)
+        {
+            if (ReferenceEquals(value, Value)) return;
             IsNewParametr = false;
-            if (value is string)
-            {
-                if (ReferenceEquals(value, Value)) return this;
-                Value = (string)value;
+            Value = value;
                 if (IsObject)
                     item = null;
-            }
-            else if (value is Item)
-            {
-                IsObject = true;
-                item = (Item)value;
-                Value = item.Id;
-            }
-            return this;
         }
+
+        public void SetValue(Item value)
+        {
+            if (ReferenceEquals(value, item)) return;
+            IsNewParametr = false;
+            IsObject = true;
+            item = value;
+            Value = item.Id;
+          
+        }
+
         public void DropValue()
         {
             IsNewParametr = true;
@@ -129,54 +126,34 @@ namespace SimpleRDF
     {
         public string Id;
 
+        public Item(string id)
+        {
+            Id = id;
+        }
         public Item(PxEntry entry, Graph gr): this(entry, gr, null)
         {
         }
 
-        public Item(PxEntry entry, Graph gr, string id):base(CreateContainer(entry, gr, ref id))
+        public Item(PxEntry entry, Graph gr, string id)
         {
             Id = id;
-        }
-        public static Dictionary<object, Property> CreateContainer(PxEntry entry, Graph gr, ref string id)
-        {
-        var container = new Dictionary<object, Property>();
             for (int direction = 0; direction < 3; direction++)
                 foreach (long off in entry.Field(Graph.Fields[direction]).Elements()
                     .SelectMany(pRec =>
                         pRec.Field(1).Elements()
                             .Select(offEn => (long)offEn.Get().Value)))
-                {
-                    // Находим триплет
+                {// Находим триплет
                     gr.any_triplet.offset = off;
                     object[] tri_o = (object[]) gr.any_triplet.Get().Value;
                     int tag = (int)tri_o[0];
                     object[] rec = (object[])tri_o[1];
-                    int hash;
-                    // Обрабатываем только "правильные"&& (string)rec[0] == id
-                    Property property;
-                    if (direction == 0 && tag == 2)
-                    {
-                        id = (string) rec[0];
-                        if (!container.TryGetValue(rec[1], out property))
-                            container.Add(rec[1], property = new Property {IsObject = false});
-                        property.Add((string) rec[2]);
-                    }
-                    else if (direction == 1 && tag == 1) // "direct"&& rec[0].GetHashCode() == id
-                    {
-                        id = (string)rec[0];
-                        if (!container.TryGetValue(rec[1], out property))
-                            container.Add(rec[1], property = new Property{IsObject = true});
-                        property.Add((string) rec[2]);
-                    }
-                    else if (direction == 2 && tag == 1) // "inverse"(string)rec[2] != id
-                    {
-                        id = (string)rec[2];
-                        if (!container.TryGetValue(rec[1], out property))
-                            container.Add(rec[1], property = new Property { IsObject = true });
-                        property.Add((string) rec[0]);
-                    }
+                    var property = (Property)(this[rec[1]] ?? (this[rec[1]] = new Property { IsObject = tag == 1 }));
+                        property.Add((string)
+                            ((direction == 0 && tag == 2) || (direction == 1 && tag == 1) // "direct"&& rec[0].GetHashCode() == id
+                            ? rec[2]
+                            : rec[0])); //(direction == 2 && tag == 1) // "inverse"(string)rec[2] == id
+
                 }
-            return container;
         }
     }
 

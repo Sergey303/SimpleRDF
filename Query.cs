@@ -79,8 +79,7 @@ namespace SimpleRDF
                         else //!ptriplet.P.IsNewParametr
                             if (p == ONames.p_name) //if (ptriplet.S.IsNewParametr) meaning true
                                 parametesWithMultiValues.Add(
-                                    ptriplet.S.Interselect(graph.GetEntriesByName(o)
-                                        .Select(entry => new Item(entry, gr))));
+                                    ptriplet.S.Interselect(graph.GetEntriesByName(o).Select(TValue.ItemCtor)));
                             else if (isData
                                      || ((p == ONames.rdftypestring || p == "a") && !ptriplet.O.IsNewParametr))
                             {
@@ -112,11 +111,13 @@ namespace SimpleRDF
                         foreach (var entry in parameterTests)
                             if (entry.Key.Items != null)
                                 foreach (var queryTriplet in entry.Value)
+                                {
+                                    QueryTriplet triplet = queryTriplet;
                                     entry.Key.Items = new HashSet<Item>(entry.Key.Items
-                                        .Where(item => item.ContainsKey(queryTriplet.P.Value)
+                                        .Where(item => item.ContainsKey(triplet.P.Value)
                                                        &&
-                                                       ((HashSet<string>)item[queryTriplet.P.Value]).Contains(
-                                                           queryTriplet.O.Value)));
+                                                       ((HashSet<string>)item[triplet.P.Value]).Contains(triplet.O.Value)));
+                                }
                             else
                                 tripletsList.AddRange(entry.Value);
             triplets = tripletsList.OrderByDescending(t => 
@@ -140,12 +141,20 @@ namespace SimpleRDF
                 ? (Action)(() => ObserveQuery(0)) 
                 : (() => SetValueKnownParameters(i+1));
             var current = ParametesWithMultiValues[i];
-            
-            foreach (var item in current.Values)
+            if(current.IsObject)
+            foreach (var item in current.Items)
                 {
                     current.SetValue(item);
                     forEachValue();
                 }
+            else
+            {
+                foreach (var item in current.DataVaues)
+                {
+                    current.SetValue(item);
+                    forEachValue();
+                }    
+            }
         }
 
         public TValue[] Parameters { get; set; }
@@ -213,7 +222,6 @@ namespace SimpleRDF
                     foreach (string values in predicate)
                     {
                         unknownValue.SetValue(values, hasValueO || predicate.IsObject);
-                        
                         ObserveQuery(i + 1);
                     }
                     unknownValue.DropValue();
@@ -224,7 +232,7 @@ namespace SimpleRDF
                 {
                     if (!itm.ContainsKey(p.Value)) continue;
                     var pre = (Property)itm[p.Value];
-                    s.SetValue(itm);
+                    s.SetValue(itm, true);
                     foreach (var v in  pre)
                     {
                         o.SetValue(v, pre.IsObject );
@@ -235,6 +243,7 @@ namespace SimpleRDF
                 o.DropValue();
                 return;
             }
+            throw new NotImplementedException();
             // p & (s or o) new params
             if (!hasValueS || !hasValueO)  //p  & (s xor o) new params
             {
@@ -295,7 +304,7 @@ namespace SimpleRDF
                         else{ known = o.Item;unknown = s;}
                         string oldValue = unknown.IsNewParametr ? null : unknown.Value;
                         bool oldIsObj = unknown.IsObject;
-                        IEnumerable<object> newValues;
+                        IEnumerable<string> newValues;
                         if (known != null && known.ContainsKey(p.Value)
                             && (newValues = predicate = (Property)known[p.Value]).Any())
                         {
